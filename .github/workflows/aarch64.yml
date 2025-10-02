@@ -1,0 +1,39 @@
+on:
+  push:
+    tags:
+      - "aarch64*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    env:
+      MIRROR: https://dl-cdn.alpinelinux.org/alpine
+      ARCH: aarch64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Chown root for rootfs
+        run: sudo chown -R 0:0 rootfs
+
+      - name: Installation
+        run: |
+          mkdir -p apk-tools-static
+          VER=$(curl -fsSL ${MIRROR}/latest-stable/main/${ARCH}/APKINDEX.tar.gz | tar -xzO APKINDEX | grep apk-tools-static -A 1 | tail -1 | cut -c3-)
+          curl -fsSL "${MIRROR}/latest-stable/main/${ARCH}/apk-tools-static-${VER}.apk" | tar -zx -C apk-tools-static
+          sudo apk-tools-static/sbin/apk.static -X ${MIRROR}/latest-stable/main -U --allow-untrusted -p rootfs --initdb add alpine-base
+
+      - name: Create the tar file
+        working-directory: ./rootfs
+        run: sudo tar --numeric-owner --absolute-names -c  * | gzip --best > ../alpinelinux.tar.gz
+
+      - name: Create a .wsl file extension
+        run: mv alpinelinux.tar.gz alpinelinux.wsl
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: alpinelinux.wsl
